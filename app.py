@@ -6,14 +6,12 @@ import openpyxl
 from flask import Flask, request, Response
 from dotenv import load_dotenv
 
-# ✅ 環境変数の読み込み
 load_dotenv()
 APP_ID = os.environ["LARK_APP_ID"]
 APP_SECRET = os.environ["LARK_APP_SECRET"]
 
 app = Flask(__name__)
 
-# ✅ Larkのアクセストークンを取得
 def get_tenant_access_token():
     url = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal"
     payload = {"app_id": APP_ID, "app_secret": APP_SECRET}
@@ -21,7 +19,6 @@ def get_tenant_access_token():
     res = requests.post(url, headers=headers, json=payload)
     return res.json().get("tenant_access_token", "")
 
-# ✅ Larkへファイルを送信
 def send_file_to_lark(chat_id, file_path="output.xlsx"):
     token = get_tenant_access_token()
     upload_url = "https://open.larksuite.com/open-apis/im/v1/files"
@@ -46,12 +43,11 @@ def send_file_to_lark(chat_id, file_path="output.xlsx"):
     headers.update({"Content-Type": "application/json"})
     requests.post(send_url, headers=headers, json=payload)
 
-# ✅ メールを案件ごとに分割
 def split_email_into_blocks(text):
     blocks = re.split(r'\n(?=(?:【)?案件名|案件概要|募集案件|プロジェクト名|案件情報)', text.strip(), flags=re.IGNORECASE)
     return [block.strip() for block in blocks if len(block.strip()) > 10]
 
-# ✅ 各案件を解析
+
 def parse_email_block(text):
     def search(patterns, text, default='未記入'):
         for pattern in patterns:
@@ -98,7 +94,6 @@ def parse_email_block(text):
         ], text)
     }
 
-# ✅ Excelへ出力
 def export_all_to_excel(data_list, filename="output.xlsx"):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -119,18 +114,15 @@ def export_all_to_excel(data_list, filename="output.xlsx"):
 
     wb.save(filename)
 
-# ✅ Webhook処理
 @app.route('/webhook', methods=['POST'])
 def lark_webhook():
     data = request.json
     print("Webhook受信データ:", json.dumps(data, indent=4, ensure_ascii=False))
 
-    # チャレンジレスポンス
     if 'challenge' in data:
         return Response(json.dumps({'challenge': data['challenge']}), status=200, mimetype='application/json')
 
     try:
-        # ✅ 正しく message_type を取得
         msg_type = data.get('event', {}).get('message', {}).get('message_type')
         if msg_type != 'text':
             print(f"無視されたメッセージタイプ: {msg_type}")
@@ -145,23 +137,16 @@ def lark_webhook():
         print(f"メッセージ抽出エラー: {str(e)}")
         return Response(json.dumps({'error': str(e)}), status=400)
 
-    # （以下略）
-
-
-    # ✅ 案件抽出・解析
     blocks = split_email_into_blocks(email_text)
     parsed_blocks = [parse_email_block(block) for block in blocks]
 
-    # ✅ ログ出力で確認
     for i, block in enumerate(parsed_blocks):
         print(f"\n--- Block {i+1} ---")
         print(json.dumps(block, ensure_ascii=False, indent=2))
 
-    # ✅ Excel出力
     filtered_blocks = [block for block in parsed_blocks if any(value != "未記入" for value in block.values())]
     export_all_to_excel(filtered_blocks)
 
-    # ✅ ファイル送信
     chat_id = message.get("chat_id") or message.get("conversation_id")
     send_file_to_lark(chat_id)
 
