@@ -3,3 +3,4 @@ gunicorn
 requests
 openpyxl
 python-dotenv
+openai
